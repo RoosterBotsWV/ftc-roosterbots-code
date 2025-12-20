@@ -1,188 +1,350 @@
-package org.firstinspires.ftc.teamcode;/* Copyright (c) 2021 FIRST. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided that
- * the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this list
- * of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice, this
- * list of conditions and the following disclaimer in the documentation and/or
- * other materials provided with the distribution.
- *
- * Neither the name of FIRST nor the names of its contributors may be used to endorse or
- * promote products derived from this software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS
- * LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-/*
- * This file contains an example of a Linear "OpMode".
- * An OpMode is a 'program' that runs in either the autonomous or the teleop period of an FTC match.
- * The names of OpModes appear on the menu of the FTC Driver Station.
- * When a selection is made from the menu, the corresponding OpMode is executed.
- *
- * This particular OpMode illustrates driving a 4-motor Omni-Directional (or Holonomic) robot.
- * This code will work with either a Mecanum-Drive or an X-Drive train.
- * Both of these drives are illustrated at https://gm0.org/en/latest/docs/robot-design/drivetrains/holonomic.html
- * Note that a Mecanum drive must display an X roller-pattern when viewed from above.
- *
- * Also note that it is critical to set the correct rotation direction for each motor.  See details below.
- *
- * Holonomic drives provide the ability for the robot to move in three axes (directions) simultaneously.
- * Each motion axis is controlled by one Joystick axis.
- *
- * 1) Axial:    Driving forward and backward               Left-joystick Forward/Backward
- * 2) Lateral:  Strafing right and left                     Left-joystick Right and Left
- * 3) Yaw:      Rotating Clockwise and counter clockwise    Right-joystick Right and Left
- *
- * This code is written assuming that the right-side motors need to be reversed for the robot to drive forward.
- * When you first test your robot, if it moves backward when you push the left stick forward, then you must flip
- * the direction of all 4 motors (see code below).
- *
- * Use Android Studio to Copy this Class, and Paste it into your team's code folder with a new name.
- * Remove or comment out the @Disabled line to add this OpMode to the Driver Station OpMode list
- */
-
-@TeleOp(name="RoosterBots - Omni Linear OpMode", group="Linear OpMode")
+@TeleOp(name="RoosterBots - Refactored OpMode", group="LinearOpMode")
 //@Disabled
 public class RB_BasicOmniOpMode_Linear extends LinearOpMode {
 
-    // Declare OpMode members for each of the 4 motors.
+    // --- Time and Drive Train ---
     private ElapsedTime runtime = new ElapsedTime();
-    private DcMotor frontLeftDrive = null;
-    private DcMotor backLeftDrive = null;
-    private DcMotor frontRightDrive = null;
-    private DcMotor backRightDrive = null;
+    private DcMotorEx frontLeftDrive = null;
+    private DcMotorEx frontRightDrive = null;
+    private DcMotorEx backLeftDrive = null;
+    private DcMotorEx backRightDrive = null;
+
+    // --- Mechanisms ---
+    private DcMotorEx flywheelMotor1 = null;
+    private DcMotorEx flywheelMotor2 = null;
+    private Servo pusherServo = null;
+
+    // --- Control Variables ---
+    private double drivePowerMultiplier = 1.0;
+    private double maxFlywheelRpm = 225; // Persistent base RPM
+    
+    // Flywheel State Tracking
+    private boolean flywheelIsRunning = false;
+    private boolean flywheelIsReversed = false;
+
+    // --- Button Press Detection (Previous State) ---
+    private boolean dpadDownPressedLast = false;
+    private boolean dpadUpPressedLast = false;
+    private boolean dpadLeftPressedLast = false;
+    private boolean dpadRightPressedLast = false;
+    private boolean pusherButtonPressedLast = false;
+    private boolean leftBumperPressedLast = false;
+    private boolean rightBumperPressedLast = false;
+    private boolean yPressedLast = false;
+
+    // --- Automated Protocol (Macro) Settings ---
+    private enum AutoMoveState { 
+        IDLE, 
+        TURNING_RIGHT, 
+        PREPARING_FLYWHEEL, 
+        FIRING, 
+        WAIT_FOR_PUSHER, 
+        WAITING_BETWEEN_SHOTS, 
+        MOVING_FINAL_FORWARD 
+    };
+    private AutoMoveState autoMoveState = AutoMoveState.IDLE;
+    private ElapsedTime autoMoveTimer = new ElapsedTime();
+    private int shotCount = 0;
+    private double savedMaxRpm = 225;
+    private boolean savedFlywheelRunning = false;
+
+    // *** TUNE THESE DISTANCES ***
+    private static final double AUTO_DISTANCE_BASE_FT = 2.0; 
+    private static final double AUTO_TURN_DEGREES = 30.0;
+    private static final double AUTO_FIRE_RPM = 175.0;
+    private static final double AUTO_DRIVE_POWER = 0.25;
+    private static final double AUTO_SHOT_WAIT_MS = 150; 
+
+    // *** ENCODER CALIBRATION ***
+    private static final double TICKS_PER_REV = 28; 
+    private static final double WHEEL_DIAMETER_CM = 10.0;
+    private static final double CM_PER_FOOT = 30.48;
+    private static final double TICKS_PER_FOOT = (TICKS_PER_REV / (WHEEL_DIAMETER_CM * Math.PI)) * CM_PER_FOOT;
+    private static final double TICKS_PER_DEGREE = 0.31; 
+
+    // --- Pusher Servo State Machine ---
+    private ElapsedTime pusherServoTimer = new ElapsedTime();
+    private enum PusherServoState { IDLE, PUSHING, PAUSE_AFTER_PUSH, RETURNING };
+    private PusherServoState pusherServoState = PusherServoState.IDLE;
+    private static final double PUSHER_SERVO_FORWARD_TIME_MS = 1000;
+    private static final double PUSHER_SERVO_PAUSE_TIME_MS = 50;
+
+    // --- Flywheel Constants ---
+    private static final double FLYWHEEL_MOTOR_TICKS_PER_REV = 560;
+    private static final double MAX_POSSIBLE_RPM = 5000; 
+    private static final double RPM_ADJUST_INCREMENT = 25;
 
     @Override
     public void runOpMode() {
 
-        // Initialize the hardware variables. Note that the strings used here must correspond
-        // to the names assigned during the robot configuration step on the DS or RC devices.
-        frontLeftDrive = hardwareMap.get(DcMotor.class, "front_left_drive");
-        backLeftDrive = hardwareMap.get(DcMotor.class, "back_left_drive");
-        frontRightDrive = hardwareMap.get(DcMotor.class, "front_right_drive");
-        backRightDrive = hardwareMap.get(DcMotor.class, "back_right_drive");
+        // --- Initialization ---
+        frontLeftDrive = hardwareMap.get(DcMotorEx.class, "front_left_drive");
+        frontRightDrive = hardwareMap.get(DcMotorEx.class, "front_right_drive");
+        backLeftDrive = hardwareMap.get(DcMotorEx.class, "back_left_drive");
+        backRightDrive = hardwareMap.get(DcMotorEx.class, "back_right_drive");
 
-        // ########################################################################################
-        // !!!            IMPORTANT Drive Information. Test your motor directions.            !!!!!
-        // ########################################################################################
-        // Most robots need the motors on one side to be reversed to drive forward.
-        // The motor reversals shown here are for a "direct drive" robot (the wheels turn the same direction as the motor shaft)
-        // If your robot has additional gear reductions or uses a right-angled drive, it's important to ensure
-        // that your motors are turning in the correct direction.  So, start out with the reversals here, BUT
-        // when you first test your robot, push the left joystick forward and observe the direction the wheels turn.
-        // Reverse the direction (flip FORWARD <-> REVERSE ) of any wheel that runs backward
-        // Keep testing until ALL the wheels move the robot forward when you push the left joystick forward.
+        frontLeftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        frontRightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        backLeftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        backRightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+
+        frontLeftDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        frontRightDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backLeftDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backRightDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        flywheelMotor1 = hardwareMap.get(DcMotorEx.class, "flywheel_motor_1");
+        flywheelMotor2 = hardwareMap.get(DcMotorEx.class, "flywheel_motor_2");
+        pusherServo = hardwareMap.get(Servo.class, "pusher_servo");
+
+        flywheelMotor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        flywheelMotor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        flywheelMotor2.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        flywheelMotor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        flywheelMotor2.setDirection(DcMotor.Direction.REVERSE);
+
+        pusherServo.setPosition(0.5);
+
         frontLeftDrive.setDirection(DcMotor.Direction.REVERSE);
         backLeftDrive.setDirection(DcMotor.Direction.REVERSE);
         frontRightDrive.setDirection(DcMotor.Direction.FORWARD);
         backRightDrive.setDirection(DcMotor.Direction.FORWARD);
 
-        // Wait for the game to start (driver presses START)
-        telemetry.addData("Status", "Initialized");
+        // Make the phone screen update faster
+        telemetry.setMsTransmissionInterval(50);
+        telemetry.addData("Status", "Initialized and Ready");
         telemetry.update();
 
         waitForStart();
         runtime.reset();
 
-        // run until the end of the match (driver presses STOP)
         while (opModeIsActive()) {
-            double max;
 
-            // POV Mode uses left joystick to go forward & strafe, and right joystick to rotate.
-            double axial   = -gamepad1.left_stick_y;  // Note: pushing stick forward gives negative value
-            double lateral =  gamepad1.left_stick_x;
-            double yaw     =  gamepad1.right_stick_x;
+            // --- Snapshot Gamepad State ---
+            // We capture the buttons ONCE at the start of the loop to prevent "missed" presses
+            boolean currentDpadUp = gamepad1.dpad_up;
+            boolean currentDpadDown = gamepad1.dpad_down;
+            boolean currentDpadLeft = gamepad1.dpad_left;
+            boolean currentDpadRight = gamepad1.dpad_right;
+            boolean currentX = gamepad1.x;
+            boolean currentY = gamepad1.y;
+            boolean currentLB = gamepad1.left_bumper;
+            boolean currentRB = gamepad1.right_bumper;
 
-            // Combine the joystick requests for each axis-motion to determine each wheel's power.
-            // Set up a variable for each drive wheel to save the power level for telemetry.
-            double frontLeftPower  = axial + lateral + yaw;
-            double frontRightPower = axial - lateral - yaw;
-            double backLeftPower   = axial - lateral + yaw;
-            double backRightPower  = axial + lateral - yaw;
-
-            // Normalize the values so no wheel power exceeds 100%
-            // This ensures that the robot maintains the desired motion.
-            max = Math.max(Math.abs(frontLeftPower), Math.abs(frontRightPower));
-            max = Math.max(max, Math.abs(backLeftPower));
-            max = Math.max(max, Math.abs(backRightPower));
-
-            if (max > 1.0) {
-                frontLeftPower  /= max;
-                frontRightPower /= max;
-                backLeftPower   /= max;
-                backRightPower  /= max;
+            // --- Automated Protocol Logic (Y Button) ---
+            if (currentY && !yPressedLast && autoMoveState == AutoMoveState.IDLE) {
+                resetDriveEncoders();
+                autoMoveState = AutoMoveState.TURNING_RIGHT;
             }
 
-            // This is test code:
-            //
-            // Uncomment the following code to test your motor directions.
-            // Each button should make the corresponding motor run FORWARD.
-            //   1) First get all the motors to take to correct positions on the robot
-            //      by adjusting your Robot Configuration if necessary.
-            //   2) Then make sure they run in the correct direction by modifying the
-            //      the setDirection() calls above.
-            // Once the correct motors move in the correct direction re-comment this code.
+            if (autoMoveState != AutoMoveState.IDLE) {
+                handleAutoMove();
+            } else {
+                // --- Manual Controls ---
+                double axial   = -gamepad1.left_stick_y;
+                double lateral =  gamepad1.left_stick_x;
+                double yaw     =  gamepad1.right_stick_x;
 
-            
-            frontLeftPower  = gamepad1.x ? 1.0 : 0.0;  // X gamepad
-            backLeftPower   = gamepad1.a ? 1.0 : 0.0;  // A gamepad
-            frontRightPower = gamepad1.y ? 1.0 : 0.0;  // Y gamepad
-            backRightPower  = gamepad1.b ? 1.0 : 0.0;  // B gamepad
-            
+                axial   = Math.pow(axial, 3);
+                lateral = Math.pow(lateral, 3);
+                yaw     = Math.pow(yaw, 3);
 
-            // Send calculated power to wheels
-            frontLeftDrive.setPower(frontLeftPower);
-            frontRightDrive.setPower(frontRightPower);
-            backLeftDrive.setPower(backLeftPower);
-            backRightDrive.setPower(backRightPower);
+                double frontLeftPower  = axial + lateral + yaw;
+                double frontRightPower = axial - lateral - yaw;
+                double backLeftPower   = axial - lateral + yaw;
+                double backRightPower  = axial + lateral - yaw;
 
-            // Show the elapsed game time and wheel power.
+                double max = Math.max(Math.abs(frontLeftPower), Math.abs(frontRightPower));
+                max = Math.max(max, Math.abs(backLeftPower));
+                max = Math.max(max, Math.abs(backRightPower));
+
+                if (max > 1.0) {
+                    frontLeftPower /= max; frontRightPower /= max;
+                    backLeftPower /= max; backRightPower /= max;
+                }
+
+                if (currentDpadLeft && !dpadLeftPressedLast) drivePowerMultiplier = Math.min(1.0, drivePowerMultiplier + 0.10);
+                if (currentDpadRight && !dpadRightPressedLast) drivePowerMultiplier = Math.max(0.0, drivePowerMultiplier - 0.10);
+
+                frontLeftDrive.setPower(frontLeftPower * drivePowerMultiplier);
+                frontRightDrive.setPower(frontRightPower * drivePowerMultiplier);
+                backLeftDrive.setPower(backLeftPower * drivePowerMultiplier);
+                backRightDrive.setPower(backRightPower * drivePowerMultiplier);
+
+                // Manual Flywheel RPM Adjustment
+                if (currentDpadUp && !dpadUpPressedLast) {
+                    maxFlywheelRpm = Math.min(MAX_POSSIBLE_RPM, maxFlywheelRpm + RPM_ADJUST_INCREMENT);
+                }
+                if (currentDpadDown && !dpadDownPressedLast) {
+                    maxFlywheelRpm = Math.max(0, maxFlywheelRpm - RPM_ADJUST_INCREMENT);
+                }
+
+                if (currentLB && !leftBumperPressedLast) {
+                    if (flywheelIsRunning && !flywheelIsReversed) flywheelIsRunning = false;
+                    else { flywheelIsRunning = true; flywheelIsReversed = false; }
+                }
+                if (currentRB && !rightBumperPressedLast) {
+                    if (flywheelIsRunning && flywheelIsReversed) flywheelIsRunning = false;
+                    else { flywheelIsRunning = true; flywheelIsReversed = true; }
+                }
+            }
+
+            double targetFlywheelRpm = 0.0;
+            if (flywheelIsRunning) {
+                targetFlywheelRpm = flywheelIsReversed ? -maxFlywheelRpm : maxFlywheelRpm;
+            }
+            double flywheelVelocity = (targetFlywheelRpm / 60.0) * FLYWHEEL_MOTOR_TICKS_PER_REV;
+            flywheelMotor1.setVelocity(flywheelVelocity);
+            flywheelMotor2.setVelocity(flywheelVelocity);
+
+            switch (pusherServoState) {
+                case IDLE:
+                    if (autoMoveState == AutoMoveState.IDLE && currentX && !pusherButtonPressedLast) {
+                        pusherServoState = PusherServoState.PUSHING;
+                        pusherServoTimer.reset();
+                    } else {
+                        pusherServo.setPosition(0.5);
+                    }
+                    break;
+                case PUSHING:
+                    pusherServo.setPosition(1.0);
+                    if (pusherServoTimer.milliseconds() >= PUSHER_SERVO_FORWARD_TIME_MS) {
+                        pusherServoState = PusherServoState.PAUSE_AFTER_PUSH;
+                        pusherServoTimer.reset();
+                    }
+                    break;
+                case PAUSE_AFTER_PUSH:
+                    pusherServo.setPosition(0.5);
+                    if (pusherServoTimer.milliseconds() >= PUSHER_SERVO_PAUSE_TIME_MS) {
+                        pusherServoState = PusherServoState.RETURNING;
+                        pusherServoTimer.reset();
+                    }
+                    break;
+                case RETURNING:
+                    pusherServo.setPosition(0.0);
+                    if (pusherServoTimer.milliseconds() >= PUSHER_SERVO_FORWARD_TIME_MS) {
+                        pusherServoState = PusherServoState.IDLE;
+                    }
+                    break;
+            }
+
+            // --- Update States ---
+            // Save current snapshot into "Last" variables for next loop
+            dpadDownPressedLast = currentDpadDown;
+            dpadUpPressedLast = currentDpadUp;
+            dpadLeftPressedLast = currentDpadLeft;
+            dpadRightPressedLast = currentDpadRight;
+            pusherButtonPressedLast = currentX;
+            leftBumperPressedLast = currentLB;
+            rightBumperPressedLast = currentRB;
+            yPressedLast = currentY;
+
             telemetry.addData("Status", "Run Time: " + runtime.toString());
-
-            // Gamepad button states (for motor test)
-            telemetry.addData("Gamepad X pressed", gamepad1.x);
-            telemetry.addData("Gamepad A pressed", gamepad1.a);
-            telemetry.addData("Gamepad Y pressed", gamepad1.y);
-            telemetry.addData("Gamepad B pressed", gamepad1.b);
-
-            // Raw Joystick Values
-            telemetry.addData("Raw Left Stick Y", gamepad1.left_stick_y);
-            telemetry.addData("Raw Left Stick X", gamepad1.left_stick_x);
-            telemetry.addData("Raw Right Stick X", gamepad1.right_stick_x);
-
-            // Calculated Drive Values
-            telemetry.addData("Calculated Axial", axial);
-            telemetry.addData("Calculated Lateral", lateral);
-            telemetry.addData("Calculated Yaw", yaw);
-
-            // Motor Initialization Status
-            telemetry.addData("FrontLeftDrive Initialized", frontLeftDrive != null);
-            telemetry.addData("BackLeftDrive Initialized", backLeftDrive != null);
-            telemetry.addData("FrontRightDrive Initialized", frontRightDrive != null);
-            telemetry.addData("BackRightDrive Initialized", backRightDrive != null);
-
-            // Motor Power (from button test code)
-            telemetry.addData("Front left/Right Power", "%4.2f, %4.2f", frontLeftPower, frontRightPower);
-            telemetry.addData("Back  left/Right Power", "%4.2f, %4.2f", backLeftPower, backRightPower);
+            telemetry.addData("FLYWHEEL SETTING", "%.0f RPM", maxFlywheelRpm);
+            telemetry.addData("Current Target", "%.0f RPM", targetFlywheelRpm);
+            telemetry.addData("Drive Mode", autoMoveState == AutoMoveState.IDLE ? "Manual" : "Auto (" + autoMoveState + ")");
             telemetry.update();
         }
-    }}
+    }
+
+    private void handleAutoMove() {
+        switch (autoMoveState) {
+            case TURNING_RIGHT:
+                double targetTicksTurn = AUTO_TURN_DEGREES * TICKS_PER_DEGREE;
+                setDrivePower(0, 0, AUTO_DRIVE_POWER); 
+                if (Math.abs(getAverageDrivePosition()) >= targetTicksTurn) {
+                    setDrivePower(0, 0, 0);
+                    resetDriveEncoders();
+                    savedMaxRpm = maxFlywheelRpm;
+                    savedFlywheelRunning = flywheelIsRunning;
+                    maxFlywheelRpm = AUTO_FIRE_RPM;
+                    flywheelIsRunning = true;
+                    flywheelIsReversed = false;
+                    shotCount = 0;
+                    autoMoveTimer.reset();
+                    autoMoveState = AutoMoveState.PREPARING_FLYWHEEL;
+                }
+                break;
+
+            case PREPARING_FLYWHEEL:
+                if (autoMoveTimer.milliseconds() >= 1500) { 
+                    autoMoveState = AutoMoveState.FIRING;
+                }
+                break;
+
+            case FIRING:
+                pusherServoState = PusherServoState.PUSHING;
+                pusherServoTimer.reset();
+                autoMoveState = AutoMoveState.WAIT_FOR_PUSHER;
+                break;
+
+            case WAIT_FOR_PUSHER:
+                if (pusherServoState == PusherServoState.IDLE) {
+                    shotCount++;
+                    if (shotCount < 3) {
+                        autoMoveTimer.reset();
+                        autoMoveState = AutoMoveState.WAITING_BETWEEN_SHOTS;
+                    } else {
+                        maxFlywheelRpm = savedMaxRpm;
+                        flywheelIsRunning = savedFlywheelRunning;
+                        resetDriveEncoders();
+                        autoMoveState = AutoMoveState.MOVING_FINAL_FORWARD;
+                    }
+                }
+                break;
+
+            case WAITING_BETWEEN_SHOTS:
+                if (autoMoveTimer.milliseconds() >= AUTO_SHOT_WAIT_MS) {
+                    autoMoveState = AutoMoveState.FIRING;
+                }
+                break;
+
+            case MOVING_FINAL_FORWARD:
+                double targetTicksForward = 6.0 * AUTO_DISTANCE_BASE_FT * TICKS_PER_FOOT;
+                setDrivePower(AUTO_DRIVE_POWER, 0, 0);
+                if (Math.abs(getAverageDrivePosition()) >= targetTicksForward) {
+                    setDrivePower(0, 0, 0);
+                    autoMoveState = AutoMoveState.IDLE;
+                }
+                break;
+        }
+    }
+
+    private void resetDriveEncoders() {
+        frontLeftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        frontRightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        backLeftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        backRightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        frontLeftDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        frontRightDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backLeftDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backRightDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+    }
+
+    private double getAverageDrivePosition() {
+        return (Math.abs(frontLeftDrive.getCurrentPosition()) + 
+                Math.abs(frontRightDrive.getCurrentPosition()) + 
+                Math.abs(backLeftDrive.getCurrentPosition()) + 
+                Math.abs(backRightDrive.getCurrentPosition())) / 4.0;
+    }
+
+    private void setDrivePower(double axial, double lateral, double yaw) {
+        double fl = axial + lateral + yaw;
+        double fr = axial - lateral - yaw;
+        double bl = axial - lateral + yaw;
+        double br = axial + lateral - yaw;
+        frontLeftDrive.setPower(fl);
+        frontRightDrive.setPower(fr);
+        backLeftDrive.setPower(bl);
+        backRightDrive.setPower(br);
+    }
+}
