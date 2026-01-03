@@ -11,8 +11,8 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
-@TeleOp(name="RoosterBots - Headless Mode", group="LinearOpMode")
-public class headlessmode extends LinearOpMode {
+@TeleOp(name="RoosterBots - Headlessmode_upper_red", group="LinearOpMode")
+public class headlessmode_upper_red extends LinearOpMode {
 
     // --- Time and Drive Train ---
     private ElapsedTime runtime = new ElapsedTime();
@@ -29,7 +29,7 @@ public class headlessmode extends LinearOpMode {
 
     // --- Control Variables ---
     private double drivePowerMultiplier = 1.0;
-    private double maxFlywheelRpm = 225;
+    private double maxFlywheelRpm = 180;
     
     private boolean flywheelIsRunning = false;
     private boolean flywheelIsReversed = false;
@@ -47,20 +47,20 @@ public class headlessmode extends LinearOpMode {
 
     // --- Automated Protocol (Macro) Settings ---
     private enum AutoMoveState { 
-        IDLE, INITIAL_FORWARD_MOVE, PREPARING_FLYWHEEL, TURNING_RIGHT, FIRING, 
-        WAIT_FOR_PUSHER, WAITING_BETWEEN_SHOTS, MOVING_FINAL_FORWARD 
+        IDLE, MOVING_BACKWARDS, PREPARING_FLYWHEEL, FIRING, 
+        WAIT_FOR_PUSHER, WAITING_BETWEEN_SHOTS, TURNING_RIGHT, MOVING_FINAL_FORWARD 
     };
     private AutoMoveState autoMoveState = AutoMoveState.IDLE;
     private ElapsedTime autoMoveTimer = new ElapsedTime();
     private int shotCount = 0;
-    private double savedMaxRpm = 225;
+    private double savedMaxRpm = 180;
     private boolean savedFlywheelRunning = false;
 
     // *** TUNE THESE DISTANCES ***
-    private static final double AUTO_DISTANCE_INITIAL_FT = 0.5; 
-    private static final double AUTO_DISTANCE_FINAL_FT = 12.0; 
-    private static final double AUTO_TURN_DEGREES = 20.0; // Target degrees using IMU
-    private static final double AUTO_FIRE_RPM = 215.0;
+    private static final double AUTO_DISTANCE_BACKWARD_FT = 12.0; 
+    private static final double AUTO_TURN_DEGREES = 90.0; 
+    private static final double AUTO_DISTANCE_FINAL_FT = 6.0; // "A few feet"
+    private static final double AUTO_FIRE_RPM = 150.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
     private static final double AUTO_SHOT_WAIT_MS = 1500; 
 
@@ -80,7 +80,7 @@ public class headlessmode extends LinearOpMode {
 
     private static final double FLYWHEEL_MOTOR_TICKS_PER_REV = 560;
     private static final double MAX_POSSIBLE_RPM = 5000; 
-    private static final double RPM_ADJUST_INCREMENT = 25;
+    private static final double RPM_ADJUST_INCREMENT = 10;
 
     @Override
     public void runOpMode() {
@@ -156,7 +156,7 @@ public class headlessmode extends LinearOpMode {
                 
                 imu.resetYaw(); // Reset heading to zero for the start of the sequence
                 resetDriveEncoders();
-                autoMoveState = AutoMoveState.INITIAL_FORWARD_MOVE;
+                autoMoveState = AutoMoveState.MOVING_BACKWARDS;
             }
 
             if (autoMoveState != AutoMoveState.IDLE) {
@@ -245,10 +245,10 @@ public class headlessmode extends LinearOpMode {
 
     private void handleAutoMove() {
         switch (autoMoveState) {
-            case INITIAL_FORWARD_MOVE:
-                double targetTicksInit = AUTO_DISTANCE_INITIAL_FT * TICKS_PER_FOOT;
-                setDrivePower(AUTO_DRIVE_POWER, 0, 0);
-                if (Math.abs(getAverageDrivePosition()) >= targetTicksInit) {
+            case MOVING_BACKWARDS:
+                double targetTicksBack = AUTO_DISTANCE_BACKWARD_FT * TICKS_PER_FOOT;
+                setDrivePower(-AUTO_DRIVE_POWER, 0, 0); // Negative power for backwards
+                if (Math.abs(getAverageDrivePosition()) >= targetTicksBack) {
                     setDrivePower(0, 0, 0);
                     autoMoveTimer.reset();
                     autoMoveState = AutoMoveState.PREPARING_FLYWHEEL;
@@ -257,19 +257,6 @@ public class headlessmode extends LinearOpMode {
 
             case PREPARING_FLYWHEEL:
                 if (autoMoveTimer.milliseconds() >= 1500) {
-                    resetDriveEncoders();
-                    autoMoveState = AutoMoveState.TURNING_RIGHT;
-                }
-                break;
-
-            case TURNING_RIGHT:
-                // Use the Gyroscope (IMU) instead of encoders for the turn
-                double currentHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);
-                setDrivePower(0, 0, AUTO_DRIVE_POWER); 
-                
-                // We check if the absolute rotation has reached our 35 degree target
-                if (Math.abs(currentHeading) >= AUTO_TURN_DEGREES) {
-                    setDrivePower(0, 0, 0);
                     shotCount = 0;
                     autoMoveState = AutoMoveState.FIRING;
                 }
@@ -289,7 +276,7 @@ public class headlessmode extends LinearOpMode {
                         autoMoveState = AutoMoveState.WAITING_BETWEEN_SHOTS;
                     } else {
                         resetDriveEncoders();
-                        autoMoveState = AutoMoveState.MOVING_FINAL_FORWARD;
+                        autoMoveState = AutoMoveState.TURNING_RIGHT;
                     }
                 }
                 break;
@@ -297,6 +284,16 @@ public class headlessmode extends LinearOpMode {
             case WAITING_BETWEEN_SHOTS:
                 if (autoMoveTimer.milliseconds() >= AUTO_SHOT_WAIT_MS) {
                     autoMoveState = AutoMoveState.FIRING;
+                }
+                break;
+
+            case TURNING_RIGHT:
+                double currentHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);
+                setDrivePower(0, 0, AUTO_DRIVE_POWER); // Turn right
+                if (Math.abs(currentHeading) >= AUTO_TURN_DEGREES) {
+                    setDrivePower(0, 0, 0);
+                    resetDriveEncoders();
+                    autoMoveState = AutoMoveState.MOVING_FINAL_FORWARD;
                 }
                 break;
 
