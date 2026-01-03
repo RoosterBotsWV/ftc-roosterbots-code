@@ -60,7 +60,7 @@ public class headlessmode_upper_red extends LinearOpMode {
     private static final double AUTO_DISTANCE_BACKWARD_FT = 12.0; 
     private static final double AUTO_TURN_DEGREES = 90.0; 
     private static final double AUTO_DISTANCE_FINAL_FT = 6.0; // "A few feet"
-    private static final double AUTO_FIRE_RPM = 150.0;
+    private static final double AUTO_FIRE_RPM = 140.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
     private static final double AUTO_SHOT_WAIT_MS = 1500; 
 
