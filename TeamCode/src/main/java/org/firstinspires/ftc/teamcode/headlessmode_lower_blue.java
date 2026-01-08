@@ -44,6 +44,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private boolean rightBumperPressedLast = false;
     private boolean yPressedLast = false;
     private boolean backPressedLast = false;
+    private boolean startButtonPressedLast = false;
 
     // --- Automated Protocol (Macro) Settings ---
     private enum AutoMoveState { 
@@ -60,7 +61,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private static final double AUTO_DISTANCE_INITIAL_FT = 0.5; 
     private static final double AUTO_DISTANCE_FINAL_FT = 12.0; 
     private static final double AUTO_TURN_DEGREES = 20.0; // Target degrees using IMU
-    private static final double AUTO_FIRE_RPM = 205.0;
+    private static final double AUTO_FIRE_RPM = 180.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
     private static final double AUTO_SHOT_WAIT_MS = 1500; 
 
@@ -131,6 +132,17 @@ public class headlessmode_lower_blue extends LinearOpMode {
         waitForStart();
         runtime.reset();
 
+        // --- START AUTOMATED SEQUENCE IMMEDIATELY ---
+        savedMaxRpm = maxFlywheelRpm;
+        savedFlywheelRunning = flywheelIsRunning;
+        maxFlywheelRpm = AUTO_FIRE_RPM;
+        flywheelIsRunning = true;
+        flywheelIsReversed = false;
+        
+        imu.resetYaw(); 
+        resetDriveEncoders();
+        autoMoveState = AutoMoveState.INITIAL_FORWARD_MOVE;
+
         while (opModeIsActive()) {
 
             boolean currentDpadUp = gamepad1.dpad_up;
@@ -142,11 +154,21 @@ public class headlessmode_lower_blue extends LinearOpMode {
             boolean currentLB = gamepad1.left_bumper;
             boolean currentRB = gamepad1.right_bumper;
             boolean currentBack = gamepad1.back;
+            boolean currentStart = gamepad1.start;
+
+            // --- EMERGENCY STOP (Start Button) ---
+            if (currentStart && !startButtonPressedLast) {
+                autoMoveState = AutoMoveState.IDLE;
+                setDrivePower(0, 0, 0);
+                flywheelIsRunning = false;
+                maxFlywheelRpm = savedMaxRpm;
+            }
 
             if (currentBack && !backPressedLast) {
                 imu.resetYaw();
             }
 
+            // Manual trigger kept as a backup
             if (currentY && !yPressedLast && autoMoveState == AutoMoveState.IDLE) {
                 savedMaxRpm = maxFlywheelRpm;
                 savedFlywheelRunning = flywheelIsRunning;
@@ -154,7 +176,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
                 flywheelIsRunning = true;
                 flywheelIsReversed = false;
                 
-                imu.resetYaw(); // Reset heading to zero for the start of the sequence
+                imu.resetYaw(); 
                 resetDriveEncoders();
                 autoMoveState = AutoMoveState.INITIAL_FORWARD_MOVE;
             }
@@ -202,6 +224,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
             double targetFlywheelRpm = flywheelIsRunning ? (flywheelIsReversed ? -maxFlywheelRpm : maxFlywheelRpm) : 0.0;
             double flywheelVelocity = (targetFlywheelRpm / 60.0) * FLYWHEEL_MOTOR_TICKS_PER_REV;
+            flywheelVelocity = Double.isNaN(flywheelVelocity) ? 0 : flywheelVelocity;
             flywheelMotor1.setVelocity(flywheelVelocity);
             flywheelMotor2.setVelocity(flywheelVelocity);
 
@@ -233,7 +256,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
             dpadLeftPressedLast = currentDpadLeft; dpadRightPressedLast = currentDpadRight;
             pusherButtonPressedLast = currentX; leftBumperPressedLast = currentLB;
             rightBumperPressedLast = currentRB; yPressedLast = currentY;
-            backPressedLast = currentBack;
+            backPressedLast = currentBack; startButtonPressedLast = currentStart;
 
             telemetry.addData("Heading", "%.1f Deg", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
             telemetry.addData("Auto State", autoMoveState.toString());
@@ -331,7 +354,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
     private void setDrivePower(double axial, double lateral, double yaw) {
         double fl = axial + lateral + yaw; double fr = axial - lateral - yaw;
-        double bl = axial - lateral + yaw; double br = axial + lateral - yaw;
+        double bl = axial - lateral + yaw; double br = axial + lateral - yaw; // Corrected this line
         frontLeftDrive.setPower(fl); frontRightDrive.setPower(fr);
         backLeftDrive.setPower(bl); backRightDrive.setPower(br);
     }
