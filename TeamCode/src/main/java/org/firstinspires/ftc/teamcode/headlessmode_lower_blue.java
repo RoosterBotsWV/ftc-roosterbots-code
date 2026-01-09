@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.IMU;
+import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -29,10 +30,9 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
     // --- Control Variables ---
     private double drivePowerMultiplier = 1.0;
-    private double maxFlywheelRpm = 180;
+    private double maxFlywheelRpm = 1500;
     
     private boolean flywheelIsRunning = false;
-    private boolean flywheelIsReversed = false;
 
     // --- Button Press Detection ---
     private boolean dpadDownPressedLast = false;
@@ -41,7 +41,6 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private boolean dpadRightPressedLast = false;
     private boolean pusherButtonPressedLast = false;
     private boolean leftBumperPressedLast = false;
-    private boolean rightBumperPressedLast = false;
     private boolean yPressedLast = false;
     private boolean backPressedLast = false;
     private boolean startButtonPressedLast = false;
@@ -61,7 +60,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private static final double AUTO_DISTANCE_INITIAL_FT = 0.5; 
     private static final double AUTO_DISTANCE_FINAL_FT = 12.0; 
     private static final double AUTO_TURN_DEGREES = 20.0; // Target degrees using IMU
-    private static final double AUTO_FIRE_RPM = 180.0;
+    private static final double AUTO_FIRE_RPM = 1500.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
     private static final double AUTO_SHOT_WAIT_MS = 1500; 
 
@@ -78,6 +77,12 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private PusherServoState pusherServoState = PusherServoState.IDLE;
     private static final double PUSHER_SERVO_FORWARD_TIME_MS = 1000;
     private static final double PUSHER_SERVO_PAUSE_TIME_MS = 50;
+
+    // *** TUNE THESE PIDF VALUES for your specific flywheel setup ***
+    private static final double FLYWHEEL_P = 10.0;
+    private static final double FLYWHEEL_I = 3.0;
+    private static final double FLYWHEEL_D = 0.0;
+    private static final double FLYWHEEL_F = 0;
 
     private static final double FLYWHEEL_MOTOR_TICKS_PER_REV = 560;
     private static final double MAX_POSSIBLE_RPM = 5000; 
@@ -116,11 +121,13 @@ public class headlessmode_lower_blue extends LinearOpMode {
         flywheelMotor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         flywheelMotor1.setDirection(DcMotor.Direction.FORWARD);
         flywheelMotor1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        flywheelMotor1.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(FLYWHEEL_P, FLYWHEEL_I, FLYWHEEL_D, FLYWHEEL_F));
 
         flywheelMotor2.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         flywheelMotor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         flywheelMotor2.setDirection(DcMotor.Direction.REVERSE);
         flywheelMotor2.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        flywheelMotor2.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(FLYWHEEL_P, FLYWHEEL_I, FLYWHEEL_D, FLYWHEEL_F));
 
         pusherServo.setPosition(0.5);
 
@@ -141,7 +148,6 @@ public class headlessmode_lower_blue extends LinearOpMode {
         savedFlywheelRunning = flywheelIsRunning;
         maxFlywheelRpm = AUTO_FIRE_RPM;
         flywheelIsRunning = true;
-        flywheelIsReversed = false;
         
         imu.resetYaw(); 
         resetDriveEncoders();
@@ -156,7 +162,6 @@ public class headlessmode_lower_blue extends LinearOpMode {
             boolean currentX = gamepad1.x;
             boolean currentY = gamepad1.y;
             boolean currentLB = gamepad1.left_bumper;
-            boolean currentRB = gamepad1.right_bumper;
             boolean currentBack = gamepad1.back;
             boolean currentStart = gamepad1.start;
 
@@ -178,7 +183,6 @@ public class headlessmode_lower_blue extends LinearOpMode {
                 savedFlywheelRunning = flywheelIsRunning;
                 maxFlywheelRpm = AUTO_FIRE_RPM;
                 flywheelIsRunning = true;
-                flywheelIsReversed = false;
                 
                 imu.resetYaw(); 
                 resetDriveEncoders();
@@ -216,17 +220,14 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
                 if (currentDpadUp && !dpadUpPressedLast) maxFlywheelRpm = Math.min(MAX_POSSIBLE_RPM, maxFlywheelRpm + RPM_ADJUST_INCREMENT);
                 if (currentDpadDown && !dpadDownPressedLast) maxFlywheelRpm = Math.max(0, maxFlywheelRpm - RPM_ADJUST_INCREMENT);
+                
+                // Left bumper now toggles flywheel on and off
                 if (currentLB && !leftBumperPressedLast) {
-                    if (flywheelIsRunning && !flywheelIsReversed) flywheelIsRunning = false;
-                    else { flywheelIsRunning = true; flywheelIsReversed = false; }
-                }
-                if (currentRB && !rightBumperPressedLast) {
-                    if (flywheelIsRunning && flywheelIsReversed) flywheelIsRunning = false;
-                    else { flywheelIsRunning = true; flywheelIsReversed = true; }
+                    flywheelIsRunning = !flywheelIsRunning;
                 }
             }
 
-            double targetFlywheelRpm = flywheelIsRunning ? (flywheelIsReversed ? -maxFlywheelRpm : maxFlywheelRpm) : 0.0;
+            double targetFlywheelRpm = flywheelIsRunning ? maxFlywheelRpm : 0.0;
             double flywheelVelocity = (targetFlywheelRpm / 60.0) * FLYWHEEL_MOTOR_TICKS_PER_REV;
             flywheelVelocity = Double.isNaN(flywheelVelocity) ? 0 : flywheelVelocity;
             flywheelMotor1.setVelocity(flywheelVelocity);
@@ -259,13 +260,12 @@ public class headlessmode_lower_blue extends LinearOpMode {
             dpadDownPressedLast = currentDpadDown; dpadUpPressedLast = currentDpadUp;
             dpadLeftPressedLast = currentDpadLeft; dpadRightPressedLast = currentDpadRight;
             pusherButtonPressedLast = currentX; leftBumperPressedLast = currentLB;
-            rightBumperPressedLast = currentRB; yPressedLast = currentY;
+            yPressedLast = currentY;
             backPressedLast = currentBack; startButtonPressedLast = currentStart;
 
             telemetry.addData("Heading", "%.1f Deg", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
             telemetry.addData("Auto State", autoMoveState.toString());
             telemetry.addData("FLYWHEEL SETTING", "%.0f RPM", maxFlywheelRpm);
-            telemetry.addData("Status", "Headless Mode Active");
             telemetry.update();
         }
     }
