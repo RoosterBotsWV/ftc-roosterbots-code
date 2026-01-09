@@ -30,7 +30,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
     // --- Control Variables ---
     private double drivePowerMultiplier = 1.0;
-    private double maxFlywheelRpm = 1500;
+    private double maxFlywheelRpm = 200;
     
     private boolean flywheelIsRunning = false;
 
@@ -47,22 +47,23 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
     // --- Automated Protocol (Macro) Settings ---
     private enum AutoMoveState { 
-        IDLE, INITIAL_FORWARD_MOVE, PREPARING_FLYWHEEL, TURNING_LEFT, FIRING, 
+        IDLE, INITIAL_FORWARD_MOVE, PREPARING_FLYWHEEL, TURNING_LEFT, PAUSE_BEFORE_FIRE, FIRING, 
         WAIT_FOR_PUSHER, WAITING_BETWEEN_SHOTS, MOVING_FINAL_FORWARD 
     };
     private AutoMoveState autoMoveState = AutoMoveState.IDLE;
     private ElapsedTime autoMoveTimer = new ElapsedTime();
     private int shotCount = 0;
-    private double savedMaxRpm = 225;
+    private double savedMaxRpm = 180;
     private boolean savedFlywheelRunning = false;
 
     // *** TUNE THESE DISTANCES ***
     private static final double AUTO_DISTANCE_INITIAL_FT = 0.5; 
     private static final double AUTO_DISTANCE_FINAL_FT = 12.0; 
-    private static final double AUTO_TURN_DEGREES = 20.0; // Target degrees using IMU
-    private static final double AUTO_FIRE_RPM = 1500.0;
+    private static final double AUTO_TURN_DEGREES = 15.0; // Target degrees using IMU
+    private static final double AUTO_FIRE_RPM = 195.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
-    private static final double AUTO_SHOT_WAIT_MS = 1500; 
+    private static final double AUTO_SHOT_WAIT_MS = 1500;
+    private static final double AUTO_PAUSE_BEFORE_FIRE_MS = 500; 
 
     // *** ENCODER CALIBRATION (Used for forward/backward travel) ***
     private static final double TICKS_PER_REV = 28; 
@@ -85,7 +86,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private static final double FLYWHEEL_F = 0;
 
     private static final double FLYWHEEL_MOTOR_TICKS_PER_REV = 560;
-    private static final double MAX_POSSIBLE_RPM = 5000; 
+    private static final double MAX_POSSIBLE_RPM = 200;
     private static final double RPM_ADJUST_INCREMENT = 10;
 
     @Override
@@ -298,6 +299,13 @@ public class headlessmode_lower_blue extends LinearOpMode {
                 if (Math.abs(currentHeading) >= AUTO_TURN_DEGREES) {
                     setDrivePower(0, 0, 0);
                     shotCount = 0;
+                    autoMoveTimer.reset(); // Reset timer for the pause
+                    autoMoveState = AutoMoveState.PAUSE_BEFORE_FIRE;
+                }
+                break;
+
+            case PAUSE_BEFORE_FIRE:
+                if (autoMoveTimer.milliseconds() >= AUTO_PAUSE_BEFORE_FIRE_MS) {
                     autoMoveState = AutoMoveState.FIRING;
                 }
                 break;
