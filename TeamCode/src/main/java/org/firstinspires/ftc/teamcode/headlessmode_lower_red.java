@@ -59,8 +59,8 @@ public class headlessmode_lower_red extends LinearOpMode {
     // *** TUNE THESE DISTANCES ***
     private static final double AUTO_DISTANCE_INITIAL_FT = 0.5; 
     private static final double AUTO_DISTANCE_FINAL_FT = 12.0; 
-    private static final double AUTO_TURN_DEGREES = 20.0; // Target degrees using IMU
-    private static final double AUTO_FIRE_RPM = 180.0;
+    private static final double AUTO_TURN_DEGREES = 19.0; // Target degrees using IMU
+    private static final double AUTO_FIRE_RPM = 170.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
     private static final double AUTO_SHOT_WAIT_MS = 1500; 
     private static final double AUTO_PAUSE_BEFORE_FIRE_MS = 500;
