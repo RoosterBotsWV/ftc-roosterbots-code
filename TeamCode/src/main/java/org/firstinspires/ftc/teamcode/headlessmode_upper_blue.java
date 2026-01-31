@@ -63,7 +63,7 @@ public class headlessmode_upper_blue extends LinearOpMode {
     private static final double AUTO_DISTANCE_FINAL_FT = 6.0; // "A few feet"
     private static final double AUTO_FIRE_RPM = 140.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
-    private static final double AUTO_SHOT_WAIT_MS = 1500; 
+    private static final double AUTO_SHOT_WAIT_MS = 1750;
 
     // *** ENCODER CALIBRATION (Used for forward/backward travel) ***
     private static final double TICKS_PER_REV = 28; 

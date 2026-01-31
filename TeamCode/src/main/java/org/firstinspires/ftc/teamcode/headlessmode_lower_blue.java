@@ -62,7 +62,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private static final double AUTO_TURN_DEGREES = 19.0; // Target degrees using IMU
     private static final double AUTO_FIRE_RPM = 170.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
-    private static final double AUTO_SHOT_WAIT_MS = 1000;
+    private static final double AUTO_SHOT_WAIT_MS = 2000;
     private static final double AUTO_PAUSE_BEFORE_FIRE_MS = 1500;
 //Always ensure robot is lined up properly, or this code won't work.
     // *** ENCODER CALIBRATION (Used for forward/backward travel) ***
