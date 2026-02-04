@@ -28,7 +28,7 @@ public class headlessmode_upper_red extends LinearOpMode {
     private Servo pusherServo = null;
 
     // --- Control Variables ---
-    private double drivePowerMultiplier = 1.0;
+    private double drivePowerMultiplier = 2.0;
     private double maxFlywheelRpm = 180;
     
     private boolean flywheelIsRunning = false;

@@ -29,7 +29,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
     private Servo pusherServo = null;
 
     // --- Control Variables ---
-    private double drivePowerMultiplier = 1.0;
+    private double drivePowerMultiplier = 2.0;
     private double maxFlywheelRpm = 200;
     
     private boolean flywheelIsRunning = false;
@@ -58,7 +58,7 @@ public class headlessmode_lower_blue extends LinearOpMode {
 
     // *** TUNE THESE DISTANCES ***
     private static final double AUTO_DISTANCE_INITIAL_FT = 0.5; 
-    private static final double AUTO_DISTANCE_FINAL_FT = 12.0; 
+    private static final double AUTO_DISTANCE_FINAL_FT = 6.0;
     private static final double AUTO_TURN_DEGREES = 19.0; // Target degrees using IMU
     private static final double AUTO_FIRE_RPM = 170.0;
     private static final double AUTO_DRIVE_POWER = 0.25;
