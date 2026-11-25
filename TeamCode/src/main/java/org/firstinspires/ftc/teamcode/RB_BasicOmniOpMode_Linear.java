@@ -20,7 +20,6 @@ public class RB_BasicOmniOpMode_Linear extends LinearOpMode {
 
     // --- Mechanisms ---
     private DcMotorEx flywheelMotor1 = null;
-    private DcMotorEx flywheelMotor2 = null;
     private Servo pusherServo = null;
 
     // --- Control Variables ---
@@ -103,14 +102,11 @@ public class RB_BasicOmniOpMode_Linear extends LinearOpMode {
         backRightDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
         flywheelMotor1 = hardwareMap.get(DcMotorEx.class, "flywheel_motor_1");
-        flywheelMotor2 = hardwareMap.get(DcMotorEx.class, "flywheel_motor_2");
         pusherServo = hardwareMap.get(Servo.class, "pusher_servo");
 
         flywheelMotor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         flywheelMotor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        flywheelMotor2.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        flywheelMotor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        flywheelMotor2.setDirection(DcMotor.Direction.REVERSE);
+        flywheelMotor1.setDirection(DcMotor.Direction.REVERSE);
 
         pusherServo.setPosition(0.5);
 
@@ -204,7 +200,6 @@ public class RB_BasicOmniOpMode_Linear extends LinearOpMode {
             }
             double flywheelVelocity = (targetFlywheelRpm / 60.0) * FLYWHEEL_MOTOR_TICKS_PER_REV;
             flywheelMotor1.setVelocity(flywheelVelocity);
-            flywheelMotor2.setVelocity(flywheelVelocity);
 
             switch (pusherServoState) {
                 case IDLE:
